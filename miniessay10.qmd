@@ -1,0 +1,133 @@
+---
+title: "miniessay 10"
+author: "YANING JIN"
+format: pdf
+editor: visual
+---
+
+```{r}
+install.packages("readxl")
+install.packages("dplyr")
+install.packages("tidyr")
+install.packages("tidyverse")
+install.packages("broom")
+install.packages("ggplot2")
+install.packages("MASS")
+library("ggplot2")
+library("MASS")
+library("tidyverse")
+library("broom")
+library("readxl")
+library("dplyr")
+library("tidyr")
+```
+
+```{r}
+library("readxl")
+library("dplyr")
+
+
+data <- read_excel("Vote Totals Report From Official Tabulation - Hamilton Centre 036.xlsx", skip = 10)
+
+head(data)
+
+print(colnames(data))
+
+col_names <- c("Poll_Number", "Some_Other_Column", "Accepted_Ballots", "Column4", "Candidate1_Votes",
+               "Total_Ballots", "Ballots_Declined", "Column8", "Column9", "Column10", "Column11", 
+               "Column12", "Column13", "Column14", "Column15", "Column16", "Column17", "Column18", 
+               "Column19", "Column20", "Column21", "Column22", "Voting_Location")
+
+names(data) <- col_names
+
+data_cleaned <- data %>%
+  select(Poll_Number, Accepted_Ballots, Candidate1_Votes, Total_Ballots, Ballots_Declined) %>%
+  mutate(
+    Accepted_Ballots = as.integer(gsub(",", "", Accepted_Ballots)),
+    Candidate1_Votes = as.integer(gsub(",", "", Candidate1_Votes)),
+    Total_Ballots = as.integer(gsub(",", "", Total_Ballots)),
+    Ballots_Declined = as.numeric(gsub(",", "", Ballots_Declined))
+  )
+
+head(data_cleaned)
+
+```
+
+# Exploratory Data Analysis (EDA)
+
+Before deciding on the model, perform EDA to understand the distribution of your outcome variable.
+
+```{r}
+library("ggplot2")
+ggplot(data_cleaned, aes(x=Candidate1_Votes)) + 
+  geom_histogram(bins=30, fill="blue", color="black") +
+  theme_minimal() +
+  labs(title="Distribution of Candidate 1 Votes", x="Candidate 1 Votes", y="Frequency")
+
+
+```
+
+# Model Estimation
+
+## Option A: Logistic Regression
+
+If your outcome is binary, whether a candidate won a majority in each polling station, we might convert Candidate1_Votes into a binary variable and use logistic regression.
+
+```{r}
+library("dplyr")
+
+data_cleaned <- data_cleaned %>%
+  mutate(Candidate1_Win = ifelse(Candidate1_Votes > Total_Ballots/2, 1, 0))
+
+model_logistic <- glm(Candidate1_Win ~ Total_Ballots + Ballots_Declined, data=data_cleaned, family=binomial)
+summary(model_logistic)
+
+```
+
+## Option B: Poisson Regression
+
+Poisson regression is appropriate for count data that meet the assumption that the mean is equal to the variance.
+
+```{r}
+model_poisson <- glm(Candidate1_Votes ~ Total_Ballots + Ballots_Declined, data=data_cleaned, family=poisson)
+summary(model_poisson)
+
+```
+
+## Option C: Negative Binomial Regression
+
+If the count data are overdispersed which is the variance exceeds the mean, negative binomial regression is more appropriate.
+
+```{r}
+model_negbin <- MASS::glm.nb(Candidate1_Votes ~ Total_Ballots + Ballots_Declined, data=data_cleaned)
+summary(model_negbin)
+
+```
+
+## Exploratory Data Analysis (EDA)
+
+The EDA step involves visualizing the distribution of `Candidate1_Votes` using a histogram. This visualization is crucial as it provides insights into the distribution of the count data, including its skewness, presence of outliers, and whether it resembles the Poisson distribution (where the mean roughly equals the variance) or exhibits overdispersion (variance significantly exceeds the mean).
+
+## Logistic Regression
+
+The logistic regression model is used to predict a binary outcome based on predictor variables. In this context, created a binary variable `Candidate1_Win` to indicate whether a candidate won a majority of votes in each polling station. Logistic regression is suitable for questions about the probability of an event (e.g., winning) occurring given a set of predictors. Applicability: If the research question is specifically about the likelihood of a candidate winning or losing based on other factors, logistic regression is the appropriate model.
+
+## Poisson Regression
+
+Poisson regression is used for modeling count data, particularly when the data distribution is expected to follow the Poisson distribution, where the mean count is approximately equal to its variance.
+
+Applicability: This model is suitable if `Candidate1_Votes` across polling stations follows a Poisson distribution. If the EDA indicates that the mean and variance of votes are roughly equal and there's no overdispersion, Poisson regression can effectively model the vote count based on predictors like `Total_Ballots` and `Ballots_Declined`.
+
+## Negative Binomial Regression
+
+Negative binomial regression extends the Poisson regression to account for overdispersion in the count data, where the variance exceeds the mean. This is a more flexible model that includes an additional parameter to model the variance independently of the mean.
+
+Applicability: If the EDA reveals overdispersion in `Candidate1_Votes`, which is common in real-world count data, negative binomial regression is more appropriate than Poisson regression. It can more accurately estimate the effects of predictors on the vote count while properly accounting for the extra variability in the data.
+
+## Decision Criteria and Discussion
+
+-Based on EDA: The choice between these models should first consider the EDA findings. If the vote counts are overdispersed, negative binomial regression is preferred. If the data appear to follow a Poisson distribution (mean ≈ variance), Poisson regression is suitable.
+
+Research Question: The choice also depends on the research question. If the interest lies in predicting binary outcomes (e.g., win or lose), logistic regression is the way to go. For modeling the count of votes as influenced by other variables, depending on the presence or absence of overdispersion, choose between Poisson and negative binomial regression.
+
+Model Diagnostics: After fitting the models, it's crucial to perform diagnostics. For logistic regression, check the model's goodness-of-fit (e.g., Hosmer-Lemeshow test) and the area under the ROC curve (AUC). For Poisson and negative binomial regressions, assess the dispersion and the fit to ensure that the chosen model appropriately addresses the data's characteristics.
